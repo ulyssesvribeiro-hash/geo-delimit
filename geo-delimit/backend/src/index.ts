@@ -10,6 +10,11 @@ import exportRouter from './routes/export';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ─── Trust Proxy (necessário no Railway/Render/Heroku) ────────────────────────
+// O Railway coloca a aplicação detrás de um proxy reverso que adiciona o header
+// X-Forwarded-For. Sem isso, express-rate-limit lança erro ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // ─── Database Pool ────────────────────────────────────────────────────────────
 export const db = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -21,10 +26,15 @@ export const db = new Pool({
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
+app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json({ limit: '10mb' })); // GeoJSON pode ser grande
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use('/api/', limiter);
 
 // ─── Rotas ────────────────────────────────────────────────────────────────────
