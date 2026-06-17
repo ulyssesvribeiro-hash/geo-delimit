@@ -1,0 +1,96 @@
+/* ── Reset & Base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar Neon ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,255,255,0.6); }
+
+/* ── Input autofill override ──────────────────────────────────────── */
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #0d0d1a inset;
+  -webkit-text-fill-color: #e0e0e0;
+}
+
+/* ── Mapbox overrides ─────────────────────────────────────────────── */
+.mapboxgl-ctrl-bottom-right {
+  bottom: 36px !important;
+}
+.mapboxgl-ctrl-attrib {
+  background: rgba(0,0,0,0.6) !important;
+  color: #666 !important;
+  font-size: 10px !important;
+}
+.mapboxgl-ctrl-attrib a { color: #00FFFF88 !important; }
+
+.mapboxgl-ctrl-group {
+  background: rgba(10,10,20,0.9) !important;
+  border: 1px solid rgba(0,255,255,0.2) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 12px rgba(0,255,255,0.1) !important;
+}
+.mapboxgl-ctrl-group button {
+  background: transparent !important;
+  border-color: rgba(0,255,255,0.1) !important;
+}
+.mapboxgl-ctrl-group button span {
+  filter: invert(1) !important;
+}
+
+/* ── Neon glow keyframes ──────────────────────────────────────────── */
+@keyframes neonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes borderGlow {
+  0%, 100% { box-shadow: 0 0 8px currentColor; }
+  50% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin { animation: spin 0.8s linear infinite; }
+
+/* ── Range input styling ──────────────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #00FFFF;
+  box-shadow: 0 0 6px #00FFFF;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 12px #00FFFF, 0 0 24px #00FFFF;
+}
+
+/* ── Textarea ─────────────────────────────────────────────────────── */
+textarea:focus, input:focus {
+  border-color: rgba(0,255,255,0.5) !important;
+  box-shadow: 0 0 0 2px rgba(0,255,255,0.1) !important;
+}
