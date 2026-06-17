@@ -4,8 +4,9 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import * as turf from '@turf/turf';
 
 // ─── Variáveis de ambiente (Vite) ─────────────────────────────────────────────
-const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const ENV = (window as any).__ENV__ || {};
+const MAPBOX_TOKEN = ENV.VITE_MAPBOX_TOKEN || (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
+const API_BASE = ENV.VITE_API_URL || (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
