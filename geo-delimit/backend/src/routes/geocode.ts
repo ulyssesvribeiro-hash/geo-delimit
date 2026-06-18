@@ -4,7 +4,7 @@ const router = Router();
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const USER_AGENT = 'GeoDelimit/1.0 (geodelimit@example.com)';
+const USER_AGENT = 'GeoDelimit/1.0 (contato@geodelimit.app)';
 
 // ─── GET /api/geocode/search?q=&limit=5 ──────────────────────────────────────
 router.get('/search', async (req: Request, res: Response) => {
@@ -17,18 +17,28 @@ router.get('/search', async (req: Request, res: Response) => {
     url.searchParams.set('format', 'json');
     url.searchParams.set('limit', String(limit));
     url.searchParams.set('addressdetails', '1');
-    url.searchParams.set('countrycodes', 'br'); // Foco no Brasil
-    url.searchParams.set('featuretype', 'settlement,boundary');
+    url.searchParams.set('countrycodes', 'br');
+
+    console.log('[geocode/search] Buscando:', url.toString());
 
     const response = await fetch(url.toString(), {
-      headers: { 'User-Agent': USER_AGENT }
+      headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR' },
     });
 
+    console.log('[geocode/search] Status Nominatim:', response.status);
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[geocode/search] Erro Nominatim:', text.substring(0, 300));
+      return res.status(502).json({ error: 'Erro ao consultar serviço de geocodificação', detail: text.substring(0, 300) });
+    }
+
     const data = await response.json() as NominatimResult[];
+    console.log('[geocode/search] Resultados encontrados:', data.length);
 
     const results = data.map(item => ({
       osm_id: item.osm_id,
-      osm_type: item.osm_type, // 'relation' | 'way' | 'node'
+      osm_type: item.osm_type,
       display_name: item.display_name,
       nome: item.name || item.display_name.split(',')[0],
       tipo: mapNominatimType(item.type, item.class),
@@ -41,7 +51,8 @@ router.get('/search', async (req: Request, res: Response) => {
 
     res.json(results);
   } catch (err) {
-    res.status(500).json({ error: 'Erro na geocodificação', details: String(err) });
+    console.error('[geocode/search] EXCEPTION:', err);
+    res.status(500).json({ error: 'Erro na geocodificação', details: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -51,8 +62,8 @@ router.get('/polygon', async (req: Request, res: Response) => {
     const { osm_type, osm_id } = req.query;
     if (!osm_id) return res.status(400).json({ error: 'osm_id é obrigatório' });
 
-    // Estratégia 1: Overpass API para polígonos de admin_boundary
     const overpassQuery = buildOverpassQuery(String(osm_type || 'relation'), String(osm_id));
+    console.log('[geocode/polygon] Query Overpass:', overpassQuery.replace(/\s+/g, ' '));
 
     const overpassResponse = await fetch(OVERPASS_URL, {
       method: 'POST',
@@ -60,13 +71,29 @@ router.get('/polygon', async (req: Request, res: Response) => {
       body: `data=${encodeURIComponent(overpassQuery)}`,
     });
 
+    console.log('[geocode/polygon] Status Overpass:', overpassResponse.status);
+
+    if (!overpassResponse.ok) {
+      const text = await overpassResponse.text();
+      console.error('[geocode/polygon] Erro Overpass:', text.substring(0, 300));
+    }
+
     const overpassData = await overpassResponse.json() as OverpassResult;
     const geojson = overpassToGeoJSON(overpassData);
 
     if (!geojson) {
-      // Fallback: Nominatim details endpoint (para polígonos simples)
+      console.log('[geocode/polygon] Overpass não retornou geometria, tentando Nominatim details...');
       const nominatimUrl = `${NOMINATIM_URL}/details?osmtype=${getOsmTypeChar(String(osm_type))}&osmid=${osm_id}&polygon_geojson=1&format=json`;
       const nominatimResp = await fetch(nominatimUrl, { headers: { 'User-Agent': USER_AGENT } });
+
+      console.log('[geocode/polygon] Status Nominatim details:', nominatimResp.status);
+
+      if (!nominatimResp.ok) {
+        const text = await nominatimResp.text();
+        console.error('[geocode/polygon] Erro Nominatim details:', text.substring(0, 300));
+        return res.status(502).json({ error: 'Erro ao consultar detalhes da área' });
+      }
+
       const nominatimData = await nominatimResp.json() as NominatimDetails;
 
       if (nominatimData.geometry) {
@@ -78,7 +105,8 @@ router.get('/polygon', async (req: Request, res: Response) => {
 
     res.json({ geometry: geojson, source: 'overpass' });
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao obter polígono', details: String(err) });
+    console.error('[geocode/polygon] EXCEPTION:', err);
+    res.status(500).json({ error: 'Erro ao obter polígono', details: err instanceof Error ? err.message : String(err) });
   }
 });
 
@@ -99,7 +127,7 @@ function getOsmTypeChar(osmType: string): string {
 function buildOverpassQuery(osmType: string, osmId: string): string {
   const type = osmType === 'relation' ? 'relation' : osmType === 'way' ? 'way' : 'node';
   return `
-    [out:json][timeout:30];
+    [out:json][timeout:25];
     ${type}(${osmId});
     out geom;
   `;
@@ -111,7 +139,6 @@ function overpassToGeoJSON(data: OverpassResult): GeoJSONGeometry | null {
   const element = data.elements[0];
 
   if (element.type === 'relation' && element.members) {
-    // Construir MultiPolygon de uma relação OSM
     const outerWays = element.members.filter((m: OverpassMember) => m.role === 'outer');
     const coordinates = outerWays
       .filter((w: OverpassMember) => w.geometry)
