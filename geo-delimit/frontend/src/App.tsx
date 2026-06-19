@@ -40,6 +40,26 @@ interface AreaMetrics {
   areaKm2: number;
 }
 
+interface SavedArea {
+  id: string;
+  nome: string;
+  tipo: string;
+  municipio?: string;
+  estado?: string;
+  regiao?: string;
+  area_km2?: number;
+  perimetro_km?: number;
+  populacao?: number;
+  descricao?: string;
+  observacoes?: string;
+  cor_contorno: string;
+  espessura: number;
+  opacidade: number;
+  brilho_ativo: boolean;
+  animacao_ativa: boolean;
+  data_criacao: string;
+}
+
 const NEON_COLORS = [
   { name: 'Ciano',   hex: '#00FFFF' },
   { name: 'Verde',   hex: '#00FF41' },
@@ -49,6 +69,11 @@ const NEON_COLORS = [
   { name: 'Laranja', hex: '#FF6600' },
 ];
 
+const TIPO_ICONS: Record<string, string> = {
+  cidade: '🏙', bairro: '🏘', distrito: '🗺', municipio: '🏛',
+  estado: '🗾', regiao: '🌎', pais: '🌍', outro: '📍',
+};
+
 // ─── Helpers de cor ───────────────────────────────────────────────────────────
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -57,7 +82,6 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ─── Componente do Mapa (Canvas SVG overlay sobre tile OSM) ───────────────────
 declare global {
   interface Window { L: any; }
 }
@@ -74,12 +98,20 @@ export default function App() {
   const [suggestions,     setSuggestions]     = useState<SearchResult[]>([]);
   const [loading,         setLoading]         = useState(false);
   const [sidebarOpen,     setSidebarOpen]     = useState(true);
-  const [activeTab,       setActiveTab]       = useState<'style' | 'data'>('style');
+  const [activeTab,       setActiveTab]       = useState<'style' | 'data' | 'list'>('style');
   const [currentGeometry, setCurrentGeometry] = useState<GeoJSON.Geometry | null>(null);
+  const [currentAreaId,   setCurrentAreaId]   = useState<string | null>(null);
   const [selectedResult,  setSelectedResult]  = useState<SearchResult | null>(null);
   const [metrics,         setMetrics]         = useState<AreaMetrics | null>(null);
   const [saveMsg,         setSaveMsg]         = useState('');
   const [leafletReady,    setLeafletReady]    = useState(false);
+
+  // ── Estado da lista de áreas salvas ──
+  const [savedAreas,      setSavedAreas]      = useState<SavedArea[]>([]);
+  const [listLoading,     setListLoading]     = useState(false);
+  const [listError,       setListError]       = useState('');
+  const [listSearch,      setListSearch]      = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [style, setStyle] = useState<AreaStyle>({
     cor: '#00FFFF', espessura: 3, opacidade: 0.2, brilho: true, animacao: false,
@@ -91,7 +123,6 @@ export default function App() {
 
   // ─── Carrega Leaflet dinamicamente ───────────────────────────────────────
   useEffect(() => {
-    // Inject Leaflet CSS
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id   = 'leaflet-css';
@@ -99,7 +130,6 @@ export default function App() {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    // Inject Leaflet JS
     if (!document.getElementById('leaflet-js')) {
       const script = document.createElement('script');
       script.id  = 'leaflet-js';
@@ -122,7 +152,6 @@ export default function App() {
       zoomControl: false,
     });
 
-    // Tile escuro (CartoDB Dark)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
       subdomains: 'abcd',
@@ -131,7 +160,6 @@ export default function App() {
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Layer group para os polígonos
     layerGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     leafletRef.current = L;
@@ -157,24 +185,13 @@ export default function App() {
 
     const feature: GeoJSON.Feature = { type: 'Feature', properties: {}, geometry };
 
-    // Camada de preenchimento
     L.geoJSON(feature, geojsonOptions).addTo(lg);
 
-    // Camadas de glow (se ativo)
     if (s.brilho) {
-      L.geoJSON(feature, {
-        style: () => ({ color: s.cor, weight: s.espessura + 14, opacity: 0.07, fill: false }),
-      }).addTo(lg);
-      L.geoJSON(feature, {
-        style: () => ({ color: s.cor, weight: s.espessura + 7, opacity: 0.15, fill: false }),
-      }).addTo(lg);
-      L.geoJSON(feature, {
-        style: () => ({ color: s.cor, weight: s.espessura + 3, opacity: 0.30, fill: false }),
-      }).addTo(lg);
-      // Brilho branco interno
-      L.geoJSON(feature, {
-        style: () => ({ color: '#FFFFFF', weight: 1, opacity: 0.5, fill: false }),
-      }).addTo(lg);
+      L.geoJSON(feature, { style: () => ({ color: s.cor, weight: s.espessura + 14, opacity: 0.07, fill: false }) }).addTo(lg);
+      L.geoJSON(feature, { style: () => ({ color: s.cor, weight: s.espessura + 7,  opacity: 0.15, fill: false }) }).addTo(lg);
+      L.geoJSON(feature, { style: () => ({ color: s.cor, weight: s.espessura + 3,  opacity: 0.30, fill: false }) }).addTo(lg);
+      L.geoJSON(feature, { style: () => ({ color: '#FFFFFF', weight: 1, opacity: 0.5, fill: false }) }).addTo(lg);
     }
   }, []);
 
@@ -189,9 +206,8 @@ export default function App() {
     if (!style.animacao || !currentGeometry) return;
 
     let t = 0;
-    const L = leafletRef.current;
     const lg = layerGroupRef.current;
-    if (!L || !lg) return;
+    if (!lg) return;
 
     const tick = () => {
       t += 0.03;
@@ -224,11 +240,12 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // ─── Seleciona área ───────────────────────────────────────────────────────
+  // ─── Seleciona área pela busca ────────────────────────────────────────────
   const handleSelect = async (result: SearchResult) => {
     setSuggestions([]);
     setQuery(result.nome);
     setSelectedResult(result);
+    setCurrentAreaId(null);
     setLoading(true);
     setSaveMsg('');
     setAreaData(prev => ({ ...prev, nome: result.nome, municipio: result.municipio || '', estado: result.estado || '' }));
@@ -242,10 +259,8 @@ export default function App() {
       setCurrentGeometry(geom);
       drawPolygon(geom, style);
 
-      // Fit bounds
-      const L  = leafletRef.current;
       const map = mapRef.current;
-      if (L && map) {
+      if (map) {
         try {
           const fc    = turf.featureCollection([{ type: 'Feature', properties: {}, geometry: geom }]);
           const bbox  = turf.bbox(fc);
@@ -264,11 +279,114 @@ export default function App() {
     }
   };
 
-  // ─── Salvar ───────────────────────────────────────────────────────────────
+  // ─── Carrega lista de áreas salvas ───────────────────────────────────────
+  const fetchSavedAreas = useCallback(async () => {
+    setListLoading(true);
+    setListError('');
+    try {
+      const res = await fetch(`${API_BASE}/areas?limit=100`);
+      if (!res.ok) throw new Error('Erro ao buscar áreas salvas');
+      const data = await res.json();
+      setSavedAreas(data.data ?? []);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  // Carrega a lista automaticamente quando o usuário abre a aba "Lista"
+  useEffect(() => {
+    if (activeTab === 'list') fetchSavedAreas();
+  }, [activeTab, fetchSavedAreas]);
+
+  // ─── Carrega uma área salva no mapa ───────────────────────────────────────
+  const handleLoadSavedArea = async (area: SavedArea) => {
+    setLoading(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/areas/${area.id}`);
+      if (!res.ok) throw new Error('Erro ao carregar área completa');
+      const full = await res.json();
+
+      if (!full.geometry) throw new Error('Área sem geometria salva');
+
+      setCurrentGeometry(full.geometry);
+      setCurrentAreaId(area.id);
+      setQuery(area.nome);
+      setSelectedResult(null);
+
+      setStyle({
+        cor: area.cor_contorno || '#00FFFF',
+        espessura: area.espessura ?? 3,
+        opacidade: area.opacidade ?? 0.2,
+        brilho: area.brilho_ativo ?? true,
+        animacao: area.animacao_ativa ?? false,
+      });
+
+      setAreaData({
+        nome: area.nome || '',
+        municipio: area.municipio || '',
+        estado: area.estado || '',
+        regiao: area.regiao || '',
+        populacao: area.populacao ? String(area.populacao) : '',
+        descricao: area.descricao || '',
+        observacoes: area.observacoes || '',
+      });
+
+      drawPolygon(full.geometry, {
+        cor: area.cor_contorno || '#00FFFF',
+        espessura: area.espessura ?? 3,
+        opacidade: area.opacidade ?? 0.2,
+        brilho: area.brilho_ativo ?? true,
+        animacao: area.animacao_ativa ?? false,
+      });
+
+      const map = mapRef.current;
+      if (map) {
+        try {
+          const fc = turf.featureCollection([{ type: 'Feature', properties: {}, geometry: full.geometry }]);
+          const bbox = turf.bbox(fc);
+          const areaM2 = turf.area(fc);
+          setMetrics({ areaKm2: Math.round(areaM2 / 1000) / 1000 });
+          map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]], { padding: [60, 60], maxZoom: 15 });
+        } catch { /* ignorar */ }
+      }
+
+      setActiveTab('style');
+    } catch (err) {
+      setSaveMsg(`❌ Erro ao carregar: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── Excluir área salva ───────────────────────────────────────────────────
+  const handleDeleteArea = async (id: string) => {
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
+    try {
+      const res = await fetch(`${API_BASE}/areas/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Erro ao excluir');
+      setSavedAreas(prev => prev.filter(a => a.id !== id));
+      if (currentAreaId === id) setCurrentAreaId(null);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfirmDeleteId(null);
+    }
+  };
+
+  // ─── Exportar área salva (backend) ────────────────────────────────────────
+  const handleExportSaved = (id: string, fmt: 'geojson' | 'kml' | 'csv') => {
+    window.open(`${API_BASE}/export/${id}?fmt=${fmt}`, '_blank');
+  };
+
+  // ─── Salvar (criar nova) ───────────────────────────────────────────────────
   const handleSave = async () => {
     if (!currentGeometry) return setSaveMsg('❌ Selecione uma área primeiro');
     if (!areaData.nome.trim()) return setSaveMsg('❌ Nome é obrigatório');
     setLoading(true);
+    setSaveMsg('');
     try {
       const res = await fetch(`${API_BASE}/areas`, {
         method: 'POST',
@@ -284,6 +402,8 @@ export default function App() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
+      const created = await res.json();
+      setCurrentAreaId(created.id || null);
       setSaveMsg('✅ Área salva com sucesso!');
     } catch (err) {
       setSaveMsg(`❌ Erro: ${err}`);
@@ -292,7 +412,7 @@ export default function App() {
     }
   };
 
-  // ─── Exportar GeoJSON ─────────────────────────────────────────────────────
+  // ─── Exportar GeoJSON (área atual, ainda não necessariamente salva) ───────
   const handleExport = () => {
     if (!currentGeometry) return;
     const feature: GeoJSON.Feature = { type: 'Feature', properties: { ...areaData }, geometry: currentGeometry };
@@ -302,6 +422,16 @@ export default function App() {
     a.download = `${areaData.nome || 'area'}.geojson`;
     a.click();
   };
+
+  // ─── Filtro da lista ──────────────────────────────────────────────────────
+  const filteredAreas = savedAreas.filter(a => {
+    const term = listSearch.toLowerCase();
+    return (
+      a.nome.toLowerCase().includes(term) ||
+      (a.municipio || '').toLowerCase().includes(term) ||
+      (a.estado || '').toLowerCase().includes(term)
+    );
+  });
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -360,14 +490,14 @@ export default function App() {
 
       {/* ── Painel Lateral ── */}
       <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 500, width: sidebarOpen ? 340 : 0, background: 'rgba(6,6,16,0.96)', borderRight: '1px solid rgba(0,255,255,0.12)', backdropFilter: 'blur(16px)', overflow: 'hidden', transition: 'width 0.3s ease', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '72px 16px 16px', overflowY: 'auto', flex: 1, minWidth: 340 }}>
+        <div style={{ padding: '72px 16px 16px', overflowY: 'auto', flex: 1, minWidth: 340, display: 'flex', flexDirection: 'column' }}>
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
-            {(['style', 'data'] as const).map(tab => (
+            {(['style', 'data', 'list'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                style={{ flex: 1, padding: '9px 0', borderRadius: 6, border: `1px solid ${activeTab === tab ? 'rgba(0,255,255,0.5)' : 'rgba(255,255,255,0.08)'}`, background: activeTab === tab ? 'rgba(0,255,255,0.15)' : 'transparent', color: activeTab === tab ? '#00FFFF' : '#666', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.2s' }}>
-                {tab === 'style' ? '🎨 Estilo' : '📝 Dados'}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 6, border: `1px solid ${activeTab === tab ? 'rgba(0,255,255,0.5)' : 'rgba(255,255,255,0.08)'}`, background: activeTab === tab ? 'rgba(0,255,255,0.15)' : 'transparent', color: activeTab === tab ? '#00FFFF' : '#666', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all 0.2s' }}>
+                {tab === 'style' ? '🎨 Estilo' : tab === 'data' ? '📝 Dados' : '📋 Lista'}
               </button>
             ))}
           </div>
@@ -408,7 +538,7 @@ export default function App() {
           {/* ── Aba Dados ── */}
           {activeTab === 'data' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <SectionTitle>Informações da Área</SectionTitle>
+              <SectionTitle>{currentAreaId ? 'Editando Área Salva' : 'Informações da Área'}</SectionTitle>
               {([
                 ['nome',      'Nome da Área *',      'text'],
                 ['municipio', 'Município',           'text'],
@@ -434,7 +564,7 @@ export default function App() {
               ))}
 
               <button onClick={handleSave} disabled={loading} style={btnStyle('#001a33', '#00FFFF', loading)}>
-                {loading ? '⟳ Salvando...' : '💾 Salvar no Banco de Dados'}
+                {loading ? '⟳ Salvando...' : currentAreaId ? '💾 Salvar como Nova Cópia' : '💾 Salvar no Banco de Dados'}
               </button>
 
               {saveMsg && (
@@ -442,6 +572,80 @@ export default function App() {
                   {saveMsg}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Aba Lista (Áreas Salvas) ── */}
+          {activeTab === 'list' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}>
+
+              <input
+                value={listSearch}
+                onChange={e => setListSearch(e.target.value)}
+                placeholder="🔍 Filtrar áreas salvas..."
+                style={{ padding: '8px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#e0e0e0', fontSize: 13, outline: 'none' }}
+              />
+
+              <button onClick={fetchSavedAreas} style={{ padding: '7px', borderRadius: 6, background: 'rgba(0,255,255,0.06)', border: '1px solid rgba(0,255,255,0.25)', color: '#00FFFF', fontSize: 12, cursor: 'pointer' }}>
+                {listLoading ? '⟳ Carregando...' : `↻ Recarregar (${savedAreas.length})`}
+              </button>
+
+              {listError && (
+                <div style={{ color: '#ff6b6b', fontSize: 12, padding: '6px 10px', background: 'rgba(255,0,0,0.08)', borderRadius: 6 }}>
+                  {listError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 }}>
+                {filteredAreas.length === 0 && !listLoading && (
+                  <div style={{ color: '#444', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+                    {listSearch ? 'Nenhuma área encontrada' : 'Nenhuma área salva ainda'}
+                  </div>
+                )}
+
+                {filteredAreas.map(area => (
+                  <div key={area.id}
+                    style={{
+                      borderRadius: 8,
+                      border: currentAreaId === area.id ? `1px solid ${area.cor_contorno}` : '1px solid rgba(255,255,255,0.07)',
+                      background: currentAreaId === area.id ? hexToRgba(area.cor_contorno, 0.1) : 'rgba(255,255,255,0.025)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div onClick={() => handleLoadSavedArea(area)}
+                      style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: area.cor_contorno, boxShadow: `0 0 6px ${area.cor_contorno}` }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {TIPO_ICONS[area.tipo] || '📍'} {area.nome}
+                        </div>
+                        <div style={{ color: '#555', fontSize: 11, marginTop: 2 }}>
+                          {[area.municipio, area.estado].filter(Boolean).join(', ')}
+                          {area.area_km2 ? ` · ${area.area_km2.toFixed(2)} km²` : ''}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 4, padding: '0 8px 8px', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 6 }}>
+                      {(['geojson', 'kml', 'csv'] as const).map(fmt => (
+                        <button key={fmt} onClick={() => handleExportSaved(area.id, fmt)} title={`Exportar ${fmt.toUpperCase()}`}
+                          style={microBtn('#0a1f0a', '#00FF41')}>
+                          {fmt.toUpperCase()}
+                        </button>
+                      ))}
+                      <div style={{ flex: 1 }} />
+                      <button onClick={() => handleDeleteArea(area.id)}
+                        style={microBtn(confirmDeleteId === area.id ? '#330a0a' : '#1a0a0a', confirmDeleteId === area.id ? '#FF5555' : '#FF666688')}
+                        title={confirmDeleteId === area.id ? 'Confirmar exclusão' : 'Excluir área'}>
+                        {confirmDeleteId === area.id ? '⚠ Confirmar' : '🗑'}
+                      </button>
+                      {confirmDeleteId === area.id && (
+                        <button onClick={() => setConfirmDeleteId(null)} style={microBtn('#161616', '#888')}>✕</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -508,5 +712,12 @@ function btnStyle(bg: string, color: string, disabled = false): React.CSSPropert
     fontSize: 14, fontWeight: 600, width: '100%',
     boxShadow: disabled ? 'none' : `0 0 16px ${color}22`,
     transition: 'all 0.2s',
+  };
+}
+
+function microBtn(bg: string, color: string): React.CSSProperties {
+  return {
+    padding: '4px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+    background: bg, border: `1px solid ${color}44`, color, cursor: 'pointer',
   };
 }
