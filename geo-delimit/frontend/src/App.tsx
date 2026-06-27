@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as turf from '@turf/turf';
+import { GAECO_LOGO } from './logoConst';
 
 // ─── Variáveis de ambiente (Runtime via env.js) ───────────────────────────────
 const ENV = (window as any).__ENV__ || {};
@@ -644,7 +645,8 @@ export default function App() {
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, background: mapTheme === 'dark' ? 'linear-gradient(to bottom, rgba(0,0,0,0.9), transparent)' : 'linear-gradient(to bottom, rgba(255,255,255,0.9), transparent)' }}>
 
         <div style={{ color: mapTheme === 'dark' ? '#00FFFF' : '#0088aa', fontWeight: 700, fontSize: 18, letterSpacing: '0.05em', textShadow: mapTheme === 'dark' ? '0 0 10px #00FFFF' : 'none', whiteSpace: 'nowrap' }}>
-          ⬡ GeoDelimit <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>· GAECO Sul</span>
+          <img src={GAECO_LOGO} alt="GAECO Sul" style={{ width: 28, height: 28, borderRadius: '50%', boxShadow: '0 0 8px rgba(0,255,255,0.4)', marginRight: 8 }} />
+          GeoDelimit <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>· GAECO Sul</span>
         </div>
 
         <div style={{ position: 'relative', flex: 1, maxWidth: 520 }}>
