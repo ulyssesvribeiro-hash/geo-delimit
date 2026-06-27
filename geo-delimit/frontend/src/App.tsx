@@ -644,7 +644,7 @@ export default function App() {
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, background: mapTheme === 'dark' ? 'linear-gradient(to bottom, rgba(0,0,0,0.9), transparent)' : 'linear-gradient(to bottom, rgba(255,255,255,0.9), transparent)' }}>
 
         <div style={{ color: mapTheme === 'dark' ? '#00FFFF' : '#0088aa', fontWeight: 700, fontSize: 18, letterSpacing: '0.05em', textShadow: mapTheme === 'dark' ? '0 0 10px #00FFFF' : 'none', whiteSpace: 'nowrap' }}>
-          ⬡ GeoDelimit
+          ⬡ GeoDelimit <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>· GAECO Sul</span>
         </div>
 
         <div style={{ position: 'relative', flex: 1, maxWidth: 520 }}>
